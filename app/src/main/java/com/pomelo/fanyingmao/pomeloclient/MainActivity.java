@@ -24,18 +24,7 @@ import java.util.Date;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
-
-    private PomeloClient client;
-    OnErrorHandler onErrorHandler = new OnErrorHandler() {
-        @Override
-        public void onError(Exception e) {
-            //To change body of implemented methods use File | Settings | File Templates.
-            e.printStackTrace();
-            Looper.prepare();
-            Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-            Looper.loop();
-        }
-    };
+    private MyPomeloClient mMyPomeloClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,151 +32,70 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setContentView(R.layout.activity_main);
         findViewById(R.id.tv_connect).setOnClickListener(this);
         findViewById(R.id.tv_send).setOnClickListener(this);
+        mMyPomeloClient = new MyPomeloClient("192.168.1.215", 3014);
     }
 
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.tv_connect:
-                try {
-                    String ip = "192.168.1.215";
-                    Integer port = 3014;
-                    if (client != null && client.isConnected()) {
-                        client.close();
-                    }
-                    client = new PomeloClient(new URI("ws://" + ip + ":" + port));
-                    client.setOnHandshakeSuccessHandler(new OnHandshakeSuccessHandler() {
-                        @Override
-                        public void onSuccess(PomeloClient pomeloClient, JSONObject jsonObject) {
-//                          client.close();
-                            try {
-                                JSONObject json = new JSONObject();
-                                json.put("token", "test552");
-                                json.put("timestamp", new Date().getTime());
-                                client.request("gate.gateHandler.queryEntry", json.toString(), new OnDataHandler() {
-                                    @Override
-                                    public void onData(PomeloMessage.Message message) {
-                                        try {
-                                            JSONObject bodyJson = message.getBodyJson();
-                                            if (bodyJson.getInt("code") != 200) {
-                                                Looper.prepare();
-                                                Toast.makeText(MainActivity.this, bodyJson.toString(), Toast.LENGTH_SHORT).show();
-                                                Looper.loop();
-                                                return;
-                                            }
-                                            String host = bodyJson.getString("host");
-                                            Integer port = bodyJson.getInt("port");
-                                            final String init_token = bodyJson.getString("init_token");
-                                            client.close();
-                                            client = new PomeloClient(new URI("ws://" + host + ":" + port));
-                                            client.setOnHandshakeSuccessHandler(new OnHandshakeSuccessHandler() {
-                                                @Override
-                                                public void onSuccess(PomeloClient pomeloClient, JSONObject jsonObject) {
-                                                    try {
-                                                        JSONObject connectorJson = new JSONObject();
-                                                        connectorJson.put("init_token", init_token);
-                                                        connectorJson.put("client", "android");
-                                                        client.request("connector.entryHandler.enter", connectorJson.toString(), new OnDataHandler() {
-
-                                                            @Override
-                                                            public void onData(PomeloMessage.Message message) {
-                                                                System.out.println(message.toString());
-                                                                JSONObject bodyJson = message.getBodyJson();
-                                                                try {
-                                                                    Looper.prepare();
-                                                                    if (bodyJson.getInt("code") != 200) {
-                                                                        Toast.makeText(MainActivity.this, bodyJson.toString(), Toast.LENGTH_SHORT).show();
-                                                                    } else {
-                                                                        Toast.makeText(MainActivity.this, "连接认证成功", Toast.LENGTH_SHORT).show();
-                                                                    }
-                                                                    Looper.loop();
-
-                                                                } catch (JSONException e) {
-                                                                    e.printStackTrace();
-                                                                }
-
-                                                            }
-                                                        });
-                                                    } catch (JSONException e) {
-                                                        e.printStackTrace();
-                                                    }
-                                                    catch (PomeloException e) {
-                                                        e.printStackTrace();
-                                                    }
-                                                }
-                                            });
-                                            client.setOnErrorHandler(onErrorHandler);
-                                            client.connect();
-                                        } catch (JSONException e) {
-                                            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                                        } catch (URISyntaxException e) {
-                                            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-                                        }
-                                    }
-                                });
-                            } catch (PomeloException e) {
-                                e.printStackTrace();
-                                Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                                Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                            }
+                mMyPomeloClient.enterConnect("test552", "android",new OnDataHandler() {
+                    @Override
+                    public void onData(PomeloMessage.Message message) {
+                        if(message == null){
+                            System.out.println("连接认证失败");
+                            return;
                         }
-                    });
-                    client.setOnErrorHandler(onErrorHandler);
-                    client.connect();
-                } catch (URISyntaxException e) {
-                    e.printStackTrace();
-                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
+                        System.out.println(message.toString());
+                        JSONObject bodyJson = message.getBodyJson();
+                        try {
+                            if (bodyJson.getInt("code") != 200) {
+                                System.out.println(bodyJson.toString());
+                            } else {
+                                System.out.println("连接认证成功");
+                                onPush();
+                            }
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+
+                    }
+                });
                 break;
             case R.id.tv_send:
-                send();
+                mMyPomeloClient.send("41", 0, "hello", "fym", new OnDataHandler() {
+                    @Override
+                    public void onData(PomeloMessage.Message message) {
+                        JSONObject bodyJson = message.getBodyJson();
+                        try {
+                            if (bodyJson.getInt("code") != 200) {
+                                System.out.println(bodyJson.toString());
+                            } else {
+                                System.out.println("发送成功");
+                            }
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
                 break;
         }
     }
 
-    private void send(){
-        JSONObject json = new JSONObject();
-        try {
-            json.put("type", 0);
-            json.put("target", "41");
-            json.put("content", "hello");
-            json.put("from_name'", "41");
-            if (client == null || !client.isConnected()) {
-                Toast.makeText(MainActivity.this, "未连接", Toast.LENGTH_SHORT).show();
-                return;
+    private void onPush(){
+        mMyPomeloClient.on("onChat", new OnDataHandler() {
+            @Override
+            public void onData(PomeloMessage.Message message) {
+                JSONObject bodyJson = message.getBodyJson();
+                System.out.println("onChat:" + bodyJson.toString());
             }
-            client.request("chat.chatHandler.send", json.toString(), new OnDataHandler() {
-                @Override
-                public void onData(PomeloMessage.Message message) {
-                    JSONObject bodyJson = message.getBodyJson();
-                    try {
-                        Looper.prepare();
-                        if (bodyJson.getInt("code") != 200) {
-                            Toast.makeText(MainActivity.this, bodyJson.toString(), Toast.LENGTH_SHORT).show();
-                        }
-                        else {
-                            Toast.makeText(MainActivity.this, "发送成功", Toast.LENGTH_SHORT).show();
-                        }
-                        Looper.loop();
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-        } catch (JSONException e) {
-            e.printStackTrace();
-        } catch (PomeloException e) {
-            e.printStackTrace();
-        }
+        });
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (client != null && client.isConnected()) {
-            client.close();
-        }
     }
+
+
 }
